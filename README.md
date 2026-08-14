@@ -17,7 +17,7 @@ This repository contains my Semester 5 Machine Learning Laboratory coursework. I
 MachineLearningLab_Sem5/
 |-- README.md
 `-- week1_KNN/
-    |-- MachineLearningLabAssignment1_KrishBansal_24CS248.ipynb
+    |-- week1_KNN.ipynb
     `-- week1_KNN.md
 ```
 

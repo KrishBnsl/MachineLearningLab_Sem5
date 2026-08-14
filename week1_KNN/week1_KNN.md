@@ -4,7 +4,7 @@ This project demonstrates multiclass classification with the K-Nearest Neighbors
 
 ## Notebook
 
-`MachineLearningLabAssignment1_KrishBansal_24CS248.ipynb`
+`week1_KNN.ipynb`
 
 ## Objectives
 
@@ -97,7 +97,7 @@ python -m pip install jupyter scikit-learn pandas seaborn matplotlib
 From this directory, start Jupyter:
 
 ```bash
-jupyter notebook MachineLearningLabAssignment1_KrishBansal_24CS248.ipynb
+jupyter notebook week1_KNN.ipynb
 ```
 
 Then run the notebook cells in order.

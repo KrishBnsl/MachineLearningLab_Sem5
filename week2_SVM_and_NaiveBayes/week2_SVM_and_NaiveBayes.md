@@ -4,7 +4,7 @@ This project demonstrates binary classification using Gaussian Naive Bayes and S
 
 ## Notebook
 
-`MachineLearningLab_Lab2_ClassificationBinary.ipynb`
+`week2_SVM_and_NaiveBayes.ipynb`
 
 ## Objectives
 
@@ -75,7 +75,7 @@ python -m pip install jupyter scikit-learn pandas kagglehub
 From this directory, start Jupyter:
 
 ```bash
-jupyter notebook MachineLearningLab_Lab2_ClassificationBinary.ipynb
+jupyter notebook week2_SVM_and_NaiveBayes.ipynb
 ```
 
 Then run the notebook cells in order.
