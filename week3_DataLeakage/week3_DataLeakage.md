@@ -1,6 +1,6 @@
-# Week 3: Data Preprocessing Pipelines and Leakage Detection on the Titanic Dataset
+# Week 3: Preprocessing and Data Leakage on the Titanic Dataset
 
-This project demonstrates how data leakage can enter a machine-learning workflow through preprocessing and feature engineering. Using the Titanic dataset and logistic regression, the notebook compares deliberately flawed workflows with a leakage-free scikit-learn pipeline and shows why a high test score is not trustworthy when held-out information influences training.
+This project demonstrates how data leakage can enter a machine-learning workflow through incorrect preprocessing and target-based feature engineering. Using the Titanic dataset and logistic regression, the notebook compares deliberately flawed workflows with a leakage-free scikit-learn pipeline.
 
 ## Notebook
 
@@ -8,24 +8,22 @@ This project demonstrates how data leakage can enter a machine-learning workflow
 
 ## Objectives
 
-- Identify where preprocessing can leak test-set information into training.
+- Explain how test-set information can leak into model training.
 - Compare preprocessing before and after the train-test split.
-- Build a leakage-free pipeline for imputation, scaling, encoding, and classification.
-- Examine leakage caused by full-dataset imputation.
-- Demonstrate severe target leakage through ticket-based target encoding.
-- Compare held-out accuracy and F1 scores across flawed and corrected workflows.
-- Summarize practical rules for preventing data leakage.
+- Build a pipeline for imputation, scaling, encoding, and classification.
+- Demonstrate leakage caused by full-dataset imputation.
+- Show severe target leakage through ticket-based survival rates.
+- Evaluate each workflow using classification metrics and visualizations.
 
 ## Dataset
 
-The notebook expects `Titanic-Dataset.xls` in the same directory. Despite its extension, the file is read as CSV-formatted text with `pandas.read_csv()`.
+The notebook downloads the Titanic dataset from Kaggle using:
 
-The dataset contains 891 passengers. The target is `Survived`, whose class distribution is:
+```python
+kagglehub.dataset_download("yasserh/titanic-dataset")
+```
 
-- Did not survive (`0`): 61.62%
-- Survived (`1`): 38.38%
-
-Seven input features are selected:
+It loads `Titanic-Dataset.csv`, which contains 891 passenger records. The target is `Survived`, and the model uses seven features:
 
 1. `Pclass`
 2. `Age`
@@ -35,92 +33,88 @@ Seven input features are selected:
 6. `Sex`
 7. `Embarked`
 
-`PassengerId`, `Name`, `Ticket`, and `Cabin` are excluded from the baseline model to avoid high-cardinality identifiers and keep the pipeline interpretable. `Ticket` is used later only to demonstrate target leakage.
+High-cardinality columns such as `Name` and `Ticket` are excluded from the baseline model for simplicity. `Ticket` is used later only to construct an intentionally leaky feature.
 
-The raw observations are split into 70% training data and 30% testing data with stratification and `random_state=67`.
+The dataset is divided into 70% training data and 30% testing data using `random_state=42`.
 
 ## Workflow
 
-### 1. Flawed preprocessing before splitting
+### 1. Preprocessing setup
 
-The first workflow fits all preprocessing steps on the complete feature matrix before creating the train and test sets. The preprocessing includes:
+Numeric and categorical features are processed separately with a `ColumnTransformer`:
 
-- Median imputation and standardization for numeric features
-- Most-frequent imputation and one-hot encoding for categorical features
+- Numeric values are filled with the median and standardized with `StandardScaler`.
+- Categorical values are filled with the most frequent category and encoded with `OneHotEncoder(handle_unknown="ignore")`.
+- Logistic regression is used for binary classification.
 
-Although the target labels are not used, the imputer, scaler, and encoder learn from the held-out feature distribution. This makes the test set no longer independent.
+The notebook evaluates each model using accuracy, precision, recall, F1 score, and ROC AUC. It also plots a confusion matrix and ROC curve.
 
-### 2. Corrected leakage-free pipeline
+### 2. Flawed preprocessing before splitting
 
-The corrected workflow splits the raw data first and combines preprocessing with `LogisticRegression` in a scikit-learn `Pipeline`. Calling `fit()` only on the training partition ensures that every imputation value, scaling statistic, and encoding category is learned without access to test rows.
+The first flawed workflow calls `fit_transform()` on the entire feature matrix before creating the training and testing partitions. The imputers, scaler, and encoder therefore learn from test rows, contaminating the held-out evaluation.
 
-The notebook illustrates that the learned feature statistics differ between the complete dataset and the training partition:
+### 3. Correct leakage-free pipeline
 
-| Statistic | Full-data value | Training-only value | Difference |
-| --- | ---: | ---: | ---: |
-| Age mean | 29.6991 | 29.8468 | -0.1477 |
-| Fare mean | 32.2042 | 30.7527 | 1.4515 |
+The corrected workflow splits the raw data first. It then places the preprocessor and logistic regression model in a single scikit-learn `Pipeline` fitted only on the training partition.
 
-### 3. Full-data imputation leakage
+The notebook shows that the mean passenger age differs between the complete dataset and the training partition:
 
-A second flawed workflow calculates missing-value replacements from the complete dataset before splitting. For this particular split, the full-data and training-only medians and mode happen to be identical:
+| Statistic | Value |
+| --- | ---: |
+| Full-dataset age mean | 29.70 |
+| Training-only age mean | 29.26 |
 
-| Feature | Full-data value | Training-only value |
-| --- | ---: | ---: |
-| Age | 28.0 | 28.0 |
-| Fare | 14.4542 | 14.4542 |
-| Embarked | S | S |
+This difference illustrates that preprocessing on the complete dataset can expose information about the held-out feature distribution.
 
-This equality does not make the method valid. The full-data calculation still gives the training process access to information that would be unavailable for genuinely unseen observations.
+### 4. Full-data imputation leakage
 
-### 4. Ticket-based target leakage
+The second flawed workflow fills missing numeric values with full-dataset medians and categorical values with full-dataset modes before splitting. Scaling and encoding happen later in a pipeline, but the imputation values have already been influenced by the test rows.
 
-The most severe flawed workflow creates `TicketSurvivalRate_LEAK` by grouping the complete dataset by `Ticket` and calculating each ticket group's mean `Survived` value before the split.
+### 5. Ticket-based target leakage
 
-Of the 891 passengers, 547 have a ticket value that occurs only once. For those passengers, the engineered feature is exactly equal to their own target label. Shared-ticket values also include outcomes from the passenger and potentially from held-out rows, producing an unrealistically powerful predictor.
+The most severe flawed workflow creates `Ticket_Surv_Rate` by grouping the complete dataset by `Ticket` and calculating the mean `Survived` value before splitting. This feature directly incorporates target labels, including labels belonging to held-out passengers, and produces an unrealistically strong model.
 
-### 5. Metric comparison
+## Results
 
-| Workflow | Accuracy | F1 score |
-| --- | ---: | ---: |
-| All preprocessing before split | 80.60% | 73.74% |
-| Full-data imputation before split | 80.60% | 73.74% |
-| Full-data ticket target encoding | 98.51% | 98.10% |
-| Corrected leakage-free pipeline | 80.60% | 73.74% |
+| Workflow | Accuracy | Precision | Recall | F1 score | ROC AUC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Preprocessing before split | 0.8097 | 0.7941 | 0.7297 | 0.7606 | 0.8800 |
+| Correct leakage-free pipeline | 0.8097 | 0.7941 | 0.7297 | 0.7606 | 0.8798 |
+| Full-data imputation | 0.8097 | 0.7941 | 0.7297 | 0.7606 | 0.8798 |
+| Full-data ticket target encoding | 0.9888 | 1.0000 | 0.9730 | 0.9863 | 0.9999 |
 
-The first two flawed workflows happen to produce the same rounded metrics as the corrected pipeline. Leakage does not always increase a score in a particular sample; the problem is that the evaluation is contaminated and cannot be treated as a reliable estimate of performance on unseen data. The ticket-based target feature demonstrates how severe leakage can produce dramatically inflated results.
+The preprocessing and imputation leaks do not change most recorded metrics for this particular split. Leakage is still present because held-out data influences model development. The ticket-based target feature makes the problem more visible by increasing accuracy to 98.88% and ROC AUC to 0.9999.
 
 ## Requirements
 
 - Python 3.9 or later
 - Jupyter Notebook or JupyterLab
-- NumPy
+- kagglehub
 - pandas
 - scikit-learn
+- matplotlib
+- seaborn
 
 Install the dependencies with:
 
 ```bash
-python -m pip install jupyter numpy pandas scikit-learn
+python -m pip install jupyter kagglehub pandas scikit-learn matplotlib seaborn
 ```
 
 ## Running the Project
 
-Place `Titanic-Dataset.xls` in this directory, then start Jupyter from the directory:
+From this directory, start Jupyter:
 
 ```bash
 jupyter notebook week3_DataLeakage.ipynb
 ```
 
-Run the notebook cells in order.
-
-> **Dataset note:** `Titanic-Dataset.xls` must contain CSV-formatted text because the notebook loads it with `pd.read_csv()`. The dataset file is not included in the current directory.
+Then run the notebook cells in order. An internet connection is required the first time `kagglehub` downloads the dataset.
 
 ## Key Observations
 
-- Any data-dependent transformation fitted before splitting can leak information, even when it does not use the target directly.
-- Equal scores do not prove that a leaky workflow is safe; they only show that the contamination did not change these rounded metrics for this split.
-- Target-derived features can reveal labels directly and make held-out performance appear nearly perfect.
-- Imputation, encoding, scaling, feature selection, and model fitting should be placed in a pipeline fitted only on training data.
-- During development, preprocessing must be refitted within each cross-validation fold, and the test set should be reserved for one final evaluation.
-- Target encoding, when appropriate, must generate training encodings out of fold and derive validation or test mappings only from training labels.
+- Split raw observations before fitting any data-dependent preprocessing step.
+- Fit imputers, scalers, and encoders only on training data by placing them inside a pipeline.
+- Similar scores do not prove that a leaky workflow is valid; they only mean the leakage had little visible effect on those metrics for this split.
+- Features derived from the complete target column can directly reveal test labels and produce misleadingly high performance.
+- The corrected pipeline provides the trustworthy comparison because the test features remain unseen until prediction and evaluation.
